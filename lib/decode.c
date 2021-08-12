@@ -41,10 +41,20 @@ static const uint8_t gf16_log[16] = {
 	0x03, 0x0e, 0x09, 0x07, 0x06, 0x0d, 0x0b, 0x0c
 };
 
+#ifdef __riscos
+#define NAMED_ATTR(_name, _value) _value
+#define NAMED_ATTR_START(_name)
+#define NAMED_ATTR_END
+#else
+#define NAMED_ATTR(_name, _value) ._name = _value
+#define NAMED_ATTR_START(_name) ._name =
+#define NAMED_ATTR_END
+#endif
+
 static const struct galois_field gf16 = {
-	.p = 15,
-	.log = gf16_log,
-	.exp = gf16_exp
+	NAMED_ATTR(p, 15),
+	NAMED_ATTR(log, gf16_log),
+	NAMED_ATTR(exp, gf16_exp)
 };
 
 static const uint8_t gf256_exp[256] = {
@@ -118,9 +128,9 @@ static const uint8_t gf256_log[256] = {
 };
 
 static const struct galois_field gf256 = {
-	.p = 255,
-	.log = gf256_log,
-	.exp = gf256_exp
+	NAMED_ATTR(p, 255),
+	NAMED_ATTR(log, gf256_log),
+	NAMED_ATTR(exp, gf256_exp)
 };
 
 /************************************************************************
@@ -933,8 +943,10 @@ void quirc_flip(struct quirc_code *code)
 {
 	struct quirc_code flipped = {0};
 	unsigned int offset = 0;
-	for (int y = 0; y < code->size; y++) {
-		for (int x = 0; x < code->size; x++) {
+    int y;
+	for (y = 0; y < code->size; y++) {
+        int x;
+		for (x = 0; x < code->size; x++) {
 			if (grid_bit(code, y, x)) {
 				flipped.cell_bitmap[offset >> 3u] |= (1u << (offset & 7u));
 			}

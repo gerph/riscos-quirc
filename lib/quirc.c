@@ -52,6 +52,9 @@ int quirc_resize(struct quirc *q, int w, int h)
 	size_t num_vars;
 	size_t vars_byte_size;
 	struct quirc_flood_fill_vars *vars = NULL;
+    size_t olddim;
+    size_t newdim;
+    size_t min;
 
 	/*
 	 * XXX: w and h should be size_t (or at least unsigned) as negatives
@@ -72,9 +75,9 @@ int quirc_resize(struct quirc *q, int w, int h)
 
 	/* compute the "old" (i.e. currently allocated) and the "new"
 	   (i.e. requested) image dimensions */
-	size_t olddim = q->w * q->h;
-	size_t newdim = w * h;
-	size_t min = (olddim < newdim ? olddim : newdim);
+	olddim = q->w * q->h;
+	newdim = w * h;
+	min = (olddim < newdim ? olddim : newdim);
 
 	/*
 	 * copy the data into the new buffer, avoiding (a) to read beyond the
@@ -145,15 +148,20 @@ int quirc_count(const struct quirc *q)
 	return q->num_grids;
 }
 
+#ifdef __riscos
+#define NAMED_INDEX(_name, _value) _value
+#else
+#define NAMED_INDEX(_name, _value) [_name] = _value
+#endif
 static const char *const error_table[] = {
-	[QUIRC_SUCCESS] = "Success",
-	[QUIRC_ERROR_INVALID_GRID_SIZE] = "Invalid grid size",
-	[QUIRC_ERROR_INVALID_VERSION] = "Invalid version",
-	[QUIRC_ERROR_FORMAT_ECC] = "Format data ECC failure",
-	[QUIRC_ERROR_DATA_ECC] = "ECC failure",
-	[QUIRC_ERROR_UNKNOWN_DATA_TYPE] = "Unknown data type",
-	[QUIRC_ERROR_DATA_OVERFLOW] = "Data overflow",
-	[QUIRC_ERROR_DATA_UNDERFLOW] = "Data underflow"
+	NAMED_INDEX(QUIRC_SUCCESS, "Success"),
+	NAMED_INDEX(QUIRC_ERROR_INVALID_GRID_SIZE, "Invalid grid size"),
+	NAMED_INDEX(QUIRC_ERROR_INVALID_VERSION, "Invalid version"),
+	NAMED_INDEX(QUIRC_ERROR_FORMAT_ECC, "Format data ECC failure"),
+	NAMED_INDEX(QUIRC_ERROR_DATA_ECC, "ECC failure"),
+	NAMED_INDEX(QUIRC_ERROR_UNKNOWN_DATA_TYPE, "Unknown data type"),
+	NAMED_INDEX(QUIRC_ERROR_DATA_OVERFLOW, "Data overflow"),
+	NAMED_INDEX(QUIRC_ERROR_DATA_UNDERFLOW, "Data underflow")
 };
 
 const char *quirc_strerror(quirc_decode_error_t err)

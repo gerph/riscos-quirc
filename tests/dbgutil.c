@@ -17,9 +17,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
+#include <setjmp.h>
+#ifdef SUPPORT_JPEG
 #include <jpeglib.h>
+#endif
+#ifdef SUPPORT_PNG
 #include <png.h>
+#endif
 
 #include <quirc.h>
 
@@ -75,6 +79,7 @@ void dump_cells(const struct quirc_code *code)
 	}
 }
 
+#ifdef SUPPORT_JPEG
 struct my_jpeg_error {
 	struct jpeg_error_mgr   base;
 	jmp_buf                 env;
@@ -143,10 +148,14 @@ int load_jpeg(struct quirc *q, const char *filename)
 	if (quirc_resize(q, dinfo.output_width, dinfo.output_height) < 0)
 		goto fail;
 
+    //printf("Width: %i, Height: %i\n", dinfo.output_width, dinfo.output_height);
+
 	image = quirc_begin(q, NULL, NULL);
 
 	for (y = 0; y < dinfo.output_height; y++) {
 		JSAMPROW row_pointer = image + y * dinfo.output_width;
+        //printf("Reading row: %i\n", y);
+        //printf("dinfo : %p, row_pointer : %p\n", &dinfo, row_pointer);
 
 		jpeg_read_scanlines(&dinfo, &row_pointer, 1);
 	}
@@ -161,7 +170,14 @@ fail:
 	jpeg_destroy_decompress(&dinfo);
 	return -1;
 }
+#else
+int load_jpeg(struct quirc *q, const char *filename)
+{
+    return -1;
+}
+#endif
 
+#ifdef SUPPORT_PNG
 /* hacked from https://dev.w3.org/Amaya/libpng/example.c
  *
  * Check if a file is a PNG image using png_sig_cmp(). Returns 1 if the given
@@ -305,3 +321,13 @@ out:
 		fclose(infile);
 	return (ret);
 }
+#else
+int check_if_png(const char *filename)
+{
+    return 0; /* Not supported */
+}
+int load_png(struct quirc *q, const char *filename)
+{
+    return -1;
+}
+#endif

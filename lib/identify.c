@@ -16,9 +16,14 @@
 
 #include <limits.h>
 #include <string.h>
+#ifdef __riscos
+#define rint(_x) (_x)
+#else
 #include <stdbool.h>
+#endif
 #include <stdlib.h>
 #include <math.h>
+#include "quirc.h"
 #include "quirc_internal.h"
 
 /************************************************************************
@@ -212,13 +217,14 @@ static void flood_fill_seed(struct quirc *q,
 	const struct quirc_flood_fill_vars *const last_vars =
 	    &stack[stack_size - 1];
 
+    struct quirc_flood_fill_vars *next_vars;
+    int next_left;
+
 	QUIRC_ASSERT(from != to);
 	QUIRC_ASSERT(q->pixels[y0 * q->w + x0] == from);
 
-	struct quirc_flood_fill_vars *next_vars;
-	int next_left;
-
 	/* Set up the first context  */
+    printf("Stack : %p\n", stack);
 	next_vars = stack;
 	next_vars->y = y0;
 
@@ -287,45 +293,60 @@ static void flood_fill_seed(struct quirc *q,
 static uint8_t otsu(const struct quirc *q)
 {
 	unsigned int numPixels = q->w * q->h;
+    uint8_t* ptr;
+    unsigned int length;
+    double sum;
+    unsigned int i;
+    double sumB;
+    unsigned int q1;
+    double max;
+    uint8_t threshold;
 
 	// Calculate histogram
 	unsigned int histogram[UINT8_MAX + 1];
 	(void)memset(histogram, 0, sizeof(histogram));
-	uint8_t* ptr = q->image;
-	unsigned int length = numPixels;
+	ptr = q->image;
+	length = numPixels;
+
 	while (length--) {
 		uint8_t value = *ptr++;
 		histogram[value]++;
 	}
 
 	// Calculate weighted sum of histogram values
-	double sum = 0;
-	unsigned int i = 0;
+	sum = 0;
+	i = 0;
 	for (i = 0; i <= UINT8_MAX; ++i) {
 		sum += i * histogram[i];
 	}
 
 	// Compute threshold
-	double sumB = 0;
-	unsigned int q1 = 0;
-	double max = 0;
-	uint8_t threshold = 0;
+	sumB = 0;
+	q1 = 0;
+	max = 0;
+	threshold = 0;
 	for (i = 0; i <= UINT8_MAX; ++i) {
+        unsigned int q2;
+        double m1;
+        double m2;
+        double m1m2;
+        double variance;
+
 		// Weighted background
 		q1 += histogram[i];
 		if (q1 == 0)
 			continue;
 
 		// Weighted foreground
-		const unsigned int q2 = numPixels - q1;
+		q2 = numPixels - q1;
 		if (q2 == 0)
 			break;
 
 		sumB += i * histogram[i];
-		const double m1 = sumB / q1;
-		const double m2 = (sum - sumB) / q2;
-		const double m1m2 = m1 - m2;
-		const double variance = m1m2 * m1m2 * q1 * q2;
+		m1 = sumB / q1;
+		m2 = (sum - sumB) / q2;
+		m1m2 = m1 - m2;
+		variance = m1m2 * m1m2 * q1 * q2;
 		if (variance >= max) {
 			threshold = i;
 			max = variance;
@@ -385,9 +406,12 @@ static void find_one_corner(void *user_data, int y, int left, int right)
 {
 	struct polygon_score_data *psd =
 		(struct polygon_score_data *)user_data;
-	int xs[2] = {left, right};
+	int xs[2];
 	int dy = y - psd->ref.y;
 	int i;
+
+    xs[0] = left;
+    xs[1] = right;
 
 	for (i = 0; i < 2; i++) {
 		int dx = xs[i] - psd->ref.x;
@@ -405,14 +429,21 @@ static void find_other_corners(void *user_data, int y, int left, int right)
 {
 	struct polygon_score_data *psd =
 		(struct polygon_score_data *)user_data;
-	int xs[2] = {left, right};
+	int xs[2];
 	int i;
+    xs[0] = left;
+    xs[1] = right;
 
 	for (i = 0; i < 2; i++) {
 		int up = xs[i] * psd->ref.x + y * psd->ref.y;
 		int right = xs[i] * -psd->ref.y + y * psd->ref.x;
-		int scores[4] = {up, right, -up, -right};
+		int scores[4];
 		int j;
+
+        scores[0] = up;
+        scores[1] = right;
+        scores[2] = -up;
+        scores[3] = -right;
 
 		for (j = 0; j < 4; j++) {
 			if (scores[j] > psd->scores[j]) {
@@ -634,8 +665,10 @@ static void find_leftmost_to_line(void *user_data, int y, int left, int right)
 {
 	struct polygon_score_data *psd =
 		(struct polygon_score_data *)user_data;
-	int xs[2] = {left, right};
+	int xs[2];
 	int i;
+    xs[0] = left;
+    xs[1] = right;
 
 	for (i = 0; i < 2; i++) {
 		int d = -psd->ref.y * xs[i] + psd->ref.x * y;
@@ -1007,9 +1040,11 @@ static void test_neighbours(struct quirc *q, int i,
 			    const struct neighbour_list *vlist)
 {
 	/* Test each possible grouping */
-	for (int j = 0; j < hlist->count; j++) {
+    int j;
+	for (j = 0; j < hlist->count; j++) {
 		const struct neighbour *hn = &hlist->n[j];
-		for (int k = 0; k < vlist->count; k++) {
+        int k;
+		for (k = 0; k < vlist->count; k++) {
 			const struct neighbour *vn = &vlist->n[k];
 			double squareness = fabs(1.0 - hn->distance / vn->distance);
 			if (squareness < 0.2)
@@ -1066,13 +1101,17 @@ static void test_grouping(struct quirc *q, unsigned int i)
 
 static void pixels_setup(struct quirc *q, uint8_t threshold)
 {
+    uint8_t* source;
+    quirc_pixel_t* dest;
+    int length;
+
 	if (QUIRC_PIXEL_ALIAS_IMAGE) {
 		q->pixels = (quirc_pixel_t *)q->image;
 	}
 
-	uint8_t* source = q->image;
-	quirc_pixel_t* dest = q->pixels;
-	int length = q->w * q->h;
+	source = q->image;
+	dest = q->pixels;
+	length = q->w * q->h;
 	while (length--) {
 		uint8_t value = *source++;
 		*dest++ = (value < threshold) ? QUIRC_PIXEL_BLACK : QUIRC_PIXEL_WHITE;

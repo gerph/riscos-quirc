@@ -17,21 +17,46 @@
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
+#ifndef __riscos
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <dirent.h>
+#endif
 #include <ctype.h>
 #include <quirc.h>
+#ifdef __riscos
+#include "jinclude.h"
+#else
 #include <jpeglib.h>
+#endif
 #include <setjmp.h>
 #include <time.h>
+#include "getopt.h"
 #include "dbgutil.h"
 
 static int want_verbose = 0;
 static int want_cell_dump = 0;
 
+#ifdef __riscos
+#include "swis.h"
+struct timespec {
+    int cs;
+};
+#define clock_gettime(_x, _p) _swi(OS_ReadMonotonicTime, _OUT(0), _p)
+#define MS(ts) (unsigned int)((ts.cs) * 10)
+#else
 #define MS(ts) (unsigned int)((ts.tv_sec * 1000) + (ts.tv_nsec / 1000000))
+#endif
+
+#ifdef __riscos
+#define DIRSEP '.'
+#define EXTSEP '/'
+#else
+#define DIRSEP '/'
+#define EXTSEP '.'
+#endif
+
 
 static struct quirc *decoder;
 
@@ -91,15 +116,20 @@ static int scan_file(const char *path, const char *filename,
 	int ret;
 	int i;
 
-	while (len >= 0 && filename[len] != '.')
-		len--;
-	ext = filename + len + 1;
-	if (strcasecmp(ext, "jpg") == 0 || strcasecmp(ext, "jpeg") == 0)
-		loader = load_jpeg;
-	else if (strcasecmp(ext, "png") == 0)
-		loader = load_png;
-	else
-		return 0;
+#ifdef __riscos
+    /* We only support JPEG */
+    loader = load_jpeg;
+#else
+    while (len >= 0 && filename[len] != EXTSEP)
+        len--;
+    ext = filename + len + 1;
+    if (strcasecmp(ext, "jpg") == 0 || strcasecmp(ext, "jpeg") == 0)
+        loader = load_jpeg;
+    else if (strcasecmp(ext, "png") == 0)
+        loader = load_png;
+    else
+        return 0;
+#endif
 
 	(void)clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &tp);
 	total_start = start = MS(tp);
@@ -122,10 +152,11 @@ static int scan_file(const char *path, const char *filename,
 	for (i = 0; i < info->id_count; i++) {
 		struct quirc_code code;
 		struct quirc_data data;
+        quirc_decode_error_t err;
 
 		quirc_extract(decoder, i, &code);
 
-		quirc_decode_error_t err = quirc_decode(&code, &data);
+		err = quirc_decode(&code, &data);
 		if (err == QUIRC_ERROR_DATA_ECC) {
 			quirc_flip(&code);
 			err = quirc_decode(&code, &data);
@@ -180,6 +211,7 @@ static int scan_file(const char *path, const char *filename,
 
 static int test_scan(const char *path, struct result_info *info);
 
+#ifdef SUPPORT_SCANDIR
 static int scan_dir(const char *path, const char *filename,
 		    struct result_info *info)
 {
@@ -217,11 +249,14 @@ static int scan_dir(const char *path, const char *filename,
 
 	return count > 0;
 }
+#endif
 
 static int test_scan(const char *path, struct result_info *info)
 {
 	int len = strlen(path);
+#ifdef SUPPORT_SCANDIR
 	struct stat st;
+#endif
 	const char *filename;
 
 	memset(info, 0, sizeof(*info));
@@ -230,6 +265,7 @@ static int test_scan(const char *path, struct result_info *info)
 		len--;
 	filename = path + len + 1;
 
+#ifdef SUPPORT_SCANDIR
 	if (lstat(path, &st) < 0) {
 		fprintf(stderr, "%s: lstat: %s\n", path, strerror(errno));
 		return -1;
@@ -240,6 +276,10 @@ static int test_scan(const char *path, struct result_info *info)
 
 	if (S_ISDIR(st.st_mode))
 		return scan_dir(path, filename, info);
+
+#else
+    return scan_file(path, filename, info);
+#endif
 
 	return 0;
 }
