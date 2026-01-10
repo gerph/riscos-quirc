@@ -72,7 +72,7 @@ jobs:
               version=$(git rev-parse --short HEAD)
           fi
           echo "This is version: $version"
-          leafname="QRCodeGen-$version.zip"
+          leafname="Quirc-$version.zip"
           if [ -f /tmp/built,a91 ] ; then
               cp /tmp/built,a91 "../Quirc-$version.zip"
           else
